@@ -27,6 +27,7 @@ class SettingSeeder extends Seeder
             ['setting_group' => 'security', 'setting_key' => 'max_failed_login_attempts', 'setting_value' => '5', 'value_type' => 'integer', 'description' => 'Failed login attempts before an account is locked (see users.failed_login_attempts/locked_until).'],
             ['setting_group' => 'security', 'setting_key' => 'account_lockout_minutes', 'setting_value' => '30', 'value_type' => 'integer', 'description' => 'How long an account stays locked after exceeding max_failed_login_attempts.'],
             ['setting_group' => 'notifications', 'setting_key' => 'in_app_enabled', 'setting_value' => 'true', 'value_type' => 'boolean', 'description' => 'Whether in-app real-time notifications are enabled.'],
+            ['setting_group' => 'notifications', 'setting_key' => 'retention_days', 'setting_value' => '90', 'value_type' => 'integer', 'description' => 'Read or archived notifications older than this are purged nightly. Unread, unarchived notifications are never purged.'],
         ];
 
         foreach ($settings as $setting) {

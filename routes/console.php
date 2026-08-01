@@ -18,3 +18,9 @@ Schedule::command('app:generate-due-collections')->dailyAt('05:00');
 // codebase's established convention (Phase 7) is a scheduled Artisan
 // command, not an App\Jobs class — followed here for consistency.
 Schedule::command('app:generate-due-expenses')->dailyAt('05:15');
+
+// Notification purge — see IMPLEMENTATION_PLAN.md Phase 12. No MySQL
+// EVENT (evt_purge_old_notifications) exists anywhere in this repo's
+// migrations, so the application-side scheduled-command route owns this
+// outright, per the plan's own "don't implement both" instruction.
+Schedule::command('app:purge-old-notifications')->dailyAt('03:00');

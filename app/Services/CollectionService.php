@@ -23,6 +23,8 @@ class CollectionService
 {
     use RetriesOnDeadlock;
 
+    public function __construct(private NotificationService $notificationService) {}
+
     /**
      * Days between collections per frequency_type — "N times per month",
      * matching the monthly_1..monthly_4 naming (schema.sql leaves the exact
@@ -65,8 +67,8 @@ class CollectionService
             ->whereNotNull('next_collection_date')
             ->where('next_collection_date', '<=', $asOf->toDateString())
             ->each(function (Subscription $subscription) use (&$generated) {
-                DB::transaction(function () use ($subscription) {
-                    Collection::create([
+                $collection = DB::transaction(function () use ($subscription) {
+                    $collection = Collection::create([
                         'customer_id' => $subscription->customer_id,
                         'subscription_id' => $subscription->id,
                         'scheduled_date' => $subscription->next_collection_date,
@@ -78,7 +80,17 @@ class CollectionService
                         'next_collection_date' => Carbon::parse($subscription->next_collection_date)
                             ->addDays($this->intervalDaysFor($subscription)),
                     ]);
+
+                    return $collection;
                 });
+
+                $this->notificationService->notifyCustomer(
+                    $subscription->customer_id,
+                    NotificationService::TYPE_COLLECTION_SCHEDULED,
+                    'Pickup scheduled',
+                    "Your laundry pickup is scheduled for {$collection->scheduled_date->format('M j, Y')}.",
+                    ['collection_id' => $collection->id],
+                );
 
                 $generated++;
             });

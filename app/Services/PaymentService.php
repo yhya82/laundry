@@ -21,6 +21,8 @@ use Illuminate\Validation\ValidationException;
  */
 class PaymentService
 {
+    public function __construct(private NotificationService $notificationService) {}
+
     /**
      * @param  array{amount: string, payment_method: string, reference: ?string}  $payment
      */
@@ -63,6 +65,14 @@ class PaymentService
             if ($status === 'paid') {
                 $this->generateReceipt($order, $record, $actor);
             }
+
+            $this->notificationService->notifyCustomer(
+                $order->customer_id,
+                NotificationService::TYPE_PAYMENT_RECEIVED,
+                'Payment received',
+                "We received a payment of {$amount} against order {$order->order_number}.",
+                ['laundry_order_id' => $order->id, 'payment_id' => $record->id],
+            );
 
             return $record->fresh();
         });
@@ -109,6 +119,14 @@ class PaymentService
                 // — same incremental-maintenance caveat as recordPayment().
                 $payment->customer()->increment('outstanding_balance', $amount);
             }
+
+            $this->notificationService->notifyCustomer(
+                $payment->customer_id,
+                NotificationService::TYPE_REFUND_PROCESSED,
+                'Refund processed',
+                "A refund of {$amount} has been processed for payment {$payment->payment_number}.",
+                ['payment_id' => $payment->id, 'refund_id' => $refund->id],
+            );
 
             return $refund->fresh();
         });

@@ -31,7 +31,7 @@ class LaundryOrderService
         'ironing', 'quality_check', 'packaging', 'ready', 'completed',
     ];
 
-    public function __construct(private PaymentService $paymentService) {}
+    public function __construct(private PaymentService $paymentService, private NotificationService $notificationService) {}
 
     /**
      * @param  array{customer_id: int, delivery_type?: string, instructions?: ?string, cart: array<int, array{package_id: int, items: array<int, array{clothing_type_id: int, quantity: int}>}>, discount?: ?array{discount_template_id: ?int, discount_type: string, value: string, reason: string}, payment?: ?array{amount: string, payment_method: string, reference: ?string}}  $data
@@ -242,7 +242,19 @@ class LaundryOrderService
                 'changed_by' => $actor->id,
             ]);
 
-            return $order->fresh();
+            $fresh = $order->fresh();
+
+            if ($nextStage === 'ready') {
+                $this->notificationService->notifyCustomer(
+                    $fresh->customer_id,
+                    NotificationService::TYPE_ORDER_READY,
+                    'Your order is ready',
+                    "Order {$fresh->order_number} is ready for {$fresh->delivery_type}.",
+                    ['laundry_order_id' => $fresh->id],
+                );
+            }
+
+            return $fresh;
         });
     }
 
@@ -258,7 +270,17 @@ class LaundryOrderService
                 'cancelled_reason' => $reason,
             ]);
 
-            return $order->fresh();
+            $fresh = $order->fresh();
+
+            $this->notificationService->notifyCustomer(
+                $fresh->customer_id,
+                NotificationService::TYPE_ORDER_CANCELLED,
+                'Your order was cancelled',
+                "Order {$fresh->order_number} was cancelled: {$reason}",
+                ['laundry_order_id' => $fresh->id],
+            );
+
+            return $fresh;
         });
     }
 

@@ -22,6 +22,8 @@ use RuntimeException;
  */
 class ExpenseService
 {
+    public function __construct(private NotificationService $notificationService) {}
+
     /**
      * @param  array{title: string, category_id: int, amount: string, payment_method: string, description: ?string, attachment_path: ?string, expense_date: string}  $data
      */
@@ -30,12 +32,24 @@ class ExpenseService
         $needsApproval = $this->exceedsThreshold($data['amount']);
         $canSelfApprove = ! $needsApproval || $actor->hasPermission('expenses.approve');
 
-        return Expense::create([
+        $expense = Expense::create([
             ...$data,
             'status' => $canSelfApprove ? 'approved' : 'pending',
             'created_by' => $actor->id,
             'approved_by' => $canSelfApprove ? $actor->id : null,
         ]);
+
+        if (! $canSelfApprove) {
+            $this->notificationService->notifyUsersWithPermission(
+                'expenses.approve',
+                NotificationService::TYPE_EXPENSE_PENDING_APPROVAL,
+                'Expense needs approval',
+                "\"{$expense->title}\" ({$expense->amount}) needs your approval.",
+                ['expense_id' => $expense->id],
+            );
+        }
+
+        return $expense;
     }
 
     private function exceedsThreshold(string $amount): bool
@@ -53,7 +67,17 @@ class ExpenseService
 
         $expense->update(['status' => 'approved', 'approved_by' => $actor->id]);
 
-        return $expense->fresh();
+        $fresh = $expense->fresh();
+
+        $this->notificationService->notifyUser(
+            $fresh->created_by,
+            NotificationService::TYPE_EXPENSE_APPROVED,
+            'Expense approved',
+            "\"{$fresh->title}\" ({$fresh->amount}) was approved.",
+            ['expense_id' => $fresh->id],
+        );
+
+        return $fresh;
     }
 
     public function reject(Expense $expense, User $actor): Expense
@@ -62,7 +86,17 @@ class ExpenseService
 
         $expense->update(['status' => 'rejected', 'approved_by' => $actor->id]);
 
-        return $expense->fresh();
+        $fresh = $expense->fresh();
+
+        $this->notificationService->notifyUser(
+            $fresh->created_by,
+            NotificationService::TYPE_EXPENSE_REJECTED,
+            'Expense rejected',
+            "\"{$fresh->title}\" ({$fresh->amount}) was rejected.",
+            ['expense_id' => $fresh->id],
+        );
+
+        return $fresh;
     }
 
     public function markPaid(Expense $expense): Expense

@@ -20,15 +20,32 @@
         x-transition
         class="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-white py-2 shadow-lg dark:border-slate-700 dark:bg-slate-800"
     >
-        <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Notifications</p>
+        <div class="flex items-center justify-between px-4 py-1.5">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Notifications</p>
+            @if ($unreadCount > 0)
+                <button wire:click="markAllAsRead" type="button" class="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">Mark all read</button>
+            @endif
+        </div>
 
         @forelse ($notifications as $notification)
-            <div class="px-4 py-2 text-sm text-slate-700 dark:text-slate-200">
-                <p class="font-medium">{{ $notification->title }}</p>
+            <button
+                wire:click="markAsRead({{ $notification->id }})"
+                type="button"
+                @class([
+                    'block w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50',
+                    'bg-sky-50 dark:bg-sky-950/40' => ! $notification->read_at,
+                ])
+            >
+                <p class="font-medium text-slate-800 dark:text-slate-100">{{ $notification->title }}</p>
                 <p class="text-slate-500 dark:text-slate-400">{{ $notification->message }}</p>
-            </div>
+                <p class="mt-0.5 text-xs text-slate-400">{{ $notification->created_at->diffForHumans() }}</p>
+            </button>
         @empty
             <p class="px-4 py-6 text-center text-sm text-slate-400">No notifications yet.</p>
         @endforelse
+
+        <div class="mt-1 border-t border-slate-100 px-4 pt-2 dark:border-slate-700">
+            <a href="{{ route('notifications.preferences') }}" wire:navigate class="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">Notification preferences</a>
+        </div>
     </div>
 </div>

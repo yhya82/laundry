@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CustomerAddress;
 use App\Models\Delivery;
 use App\Models\DeliveryStatusHistory;
+use App\Models\Employee;
 use App\Models\LaundryOrder;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -23,6 +24,8 @@ use RuntimeException;
  */
 class DeliveryService
 {
+    public function __construct(private NotificationService $notificationService) {}
+
     public function createDelivery(LaundryOrder $order, array $data, User $actor): Delivery
     {
         if ($order->delivery_type !== 'delivery') {
@@ -173,8 +176,43 @@ class DeliveryService
                 'changed_by' => $actor->id,
             ]);
 
-            return $delivery->fresh();
+            $fresh = $delivery->fresh();
+
+            $this->notifyStatusChange($fresh, $status);
+
+            return $fresh;
         });
+    }
+
+    private function notifyStatusChange(Delivery $delivery, string $status): void
+    {
+        if ($status === 'assigned') {
+            $userId = Employee::find($delivery->assigned_staff_id)?->user_id;
+
+            if ($userId) {
+                $this->notificationService->notifyUser(
+                    $userId,
+                    NotificationService::TYPE_DELIVERY_ASSIGNED,
+                    'Delivery assigned to you',
+                    "You've been assigned a delivery for order {$delivery->laundryOrder->order_number}.",
+                    ['delivery_id' => $delivery->id],
+                );
+            }
+
+            return;
+        }
+
+        $customerNotice = match ($status) {
+            'out_for_delivery' => [NotificationService::TYPE_DELIVERY_OUT_FOR_DELIVERY, 'Your order is out for delivery', "Order {$delivery->laundryOrder->order_number} is on its way to you."],
+            'delivered' => [NotificationService::TYPE_DELIVERY_DELIVERED, 'Your order was delivered', "Order {$delivery->laundryOrder->order_number} has been delivered."],
+            'failed' => [NotificationService::TYPE_DELIVERY_FAILED, 'Delivery attempt failed', "We couldn't deliver order {$delivery->laundryOrder->order_number}: {$delivery->failure_reason}"],
+            default => null,
+        };
+
+        if ($customerNotice) {
+            [$type, $title, $message] = $customerNotice;
+            $this->notificationService->notifyCustomer($delivery->customer_id, $type, $title, $message, ['delivery_id' => $delivery->id]);
+        }
     }
 
     /**

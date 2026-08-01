@@ -23,6 +23,8 @@ use RuntimeException;
  */
 class DamageService
 {
+    public function __construct(private NotificationService $notificationService) {}
+
     /**
      * @param  array<int, array{laundry_order_item_id: int, damage_type_id: int, severity: string, description: ?string}>  $items
      */
@@ -133,7 +135,17 @@ class DamageService
             'approved_by' => $actor->id,
         ]);
 
-        return $report->fresh();
+        $fresh = $report->fresh();
+
+        $this->notificationService->notifyCustomer(
+            $fresh->customer_id,
+            NotificationService::TYPE_DAMAGE_REJECTED,
+            'Damage claim rejected',
+            "Your damage report on order {$fresh->laundryOrder->order_number} was not approved for compensation.",
+            ['damage_report_id' => $fresh->id],
+        );
+
+        return $fresh;
     }
 
     /**
@@ -164,7 +176,17 @@ class DamageService
 
             $report->update(['status' => 'resolved']);
 
-            return $report->fresh();
+            $fresh = $report->fresh();
+
+            $this->notificationService->notifyCustomer(
+                $fresh->customer_id,
+                NotificationService::TYPE_DAMAGE_RESOLVED,
+                'Damage claim resolved',
+                "Your damage report on order {$fresh->laundryOrder->order_number} has been resolved ({$fresh->resolution_type}).",
+                ['damage_report_id' => $fresh->id],
+            );
+
+            return $fresh;
         });
     }
 

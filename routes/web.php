@@ -19,6 +19,7 @@ use App\Livewire\Employees\Index as EmployeesIndex;
 use App\Livewire\Expenses\Categories as ExpenseCategories;
 use App\Livewire\Expenses\Index as ExpensesIndex;
 use App\Livewire\Expenses\Schedules as ExpenseSchedules;
+use App\Livewire\Notifications\Preferences as NotificationPreferences;
 use App\Livewire\Orders\Queue as OrdersQueue;
 use App\Livewire\Orders\Show as OrderShow;
 use App\Livewire\Orders\Terminal as OrdersTerminal;
@@ -92,6 +93,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/expenses/schedules', ExpenseSchedules::class)->name('expenses.schedules');
         Route::get('/expenses/categories', ExpenseCategories::class)->name('expenses.categories');
     });
+
+    // Self-service, no permission gate — see Preferences::class docblock.
+    Route::get('/notifications/preferences', NotificationPreferences::class)->name('notifications.preferences');
 
     Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
 
