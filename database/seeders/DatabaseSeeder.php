@@ -12,10 +12,21 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Seed the application's database.
+     *
+     * Deliberately does NOT seed a bootstrap admin here — see
+     * app/Console/Commands/SeedProductionAdmin.php and
+     * MASTER_SPECIFICATION.md §10.4 §8's own warning against ever
+     * re-running a placeholder-hash admin seed against a live database.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+            DepartmentSeeder::class,
+            DamageTypeSeeder::class,
+            ExpenseCategorySeeder::class,
+            SettingSeeder::class,
+        ]);
 
         User::factory()->create([
             'name' => 'Test User',

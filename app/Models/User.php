@@ -2,48 +2,86 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    // Notifiable is kept only for Fortify's mail-channel password-reset
+    // notification (Notifiable::notify() routes to mail/etc. regardless of
+    // any database table). Its bundled notifications()/HasDatabaseNotifications
+    // relationship assumes Laravel's own notifications table shape
+    // (notifiable_type/notifiable_id, uuid PK) — this schema's `notifications`
+    // table is a deliberately different, custom shape (recipient_type/
+    // recipient_id, delivery_status, channel — see MASTER_SPECIFICATION.md
+    // §2.1/§10.1). Query the business notification system through
+    // App\Models\Notification with recipient_type='user', not $user->notifications.
+    use HasFactory, Notifiable, SoftDeletes;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
-        'password',
+        'phone',
+        'password_hash',
+        'branch_id',
+        'status',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
-        'password',
+        'password_hash',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'password_hash' => 'hashed',
+            'last_login_at' => 'datetime',
+            'locked_until' => 'datetime',
         ];
+    }
+
+    /**
+     * users.password_hash stands in for the stock `password` column —
+     * see MASTER_SPECIFICATION.md schema.sql's users table.
+     */
+    public function getAuthPassword(): string
+    {
+        return $this->password_hash;
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    // user_roles only carries created_at (DB-defaulted), not updated_at —
+    // withTimestamps() is deliberately omitted, same reasoning as Role::users().
+    public function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'user_roles')
+            ->withPivot('is_primary', 'assigned_by');
+    }
+
+    public function userRoles(): HasMany
+    {
+        return $this->hasMany(UserRole::class);
+    }
+
+    public function employee(): HasMany
+    {
+        return $this->hasMany(Employee::class);
+    }
+
+    public function hasPermission(string $slug): bool
+    {
+        return $this->roles()
+            ->whereHas('permissions', fn ($query) => $query->where('slug', $slug))
+            ->exists();
     }
 }
