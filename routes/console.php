@@ -24,3 +24,9 @@ Schedule::command('app:generate-due-expenses')->dailyAt('05:15');
 // migrations, so the application-side scheduled-command route owns this
 // outright, per the plan's own "don't implement both" instruction.
 Schedule::command('app:purge-old-notifications')->dailyAt('03:00');
+
+// Daily statistics aggregation — see IMPLEMENTATION_PLAN.md Phase 13.
+// Runs just after midnight so it aggregates a fully-finished day; every
+// other scheduled job here runs later in the morning against data that's
+// already settled from the day before.
+Schedule::command('app:aggregate-daily-statistics')->dailyAt('00:30');

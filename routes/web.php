@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ReceiptPdfController;
+use App\Http\Controllers\ReportExportController;
 use App\Livewire\Catalogue\ClothingTypes;
 use App\Livewire\Catalogue\Machines;
 use App\Livewire\Catalogue\Packages;
@@ -24,6 +25,7 @@ use App\Livewire\Orders\Queue as OrdersQueue;
 use App\Livewire\Orders\Show as OrderShow;
 use App\Livewire\Orders\Terminal as OrdersTerminal;
 use App\Livewire\Payments\Index as PaymentsIndex;
+use App\Livewire\Reports\Index as ReportsIndex;
 use App\Livewire\Settings\Index as SettingsIndex;
 use App\Livewire\Subscriptions\Index as SubscriptionsIndex;
 use Illuminate\Support\Facades\Auth;
@@ -97,6 +99,15 @@ Route::middleware(['auth'])->group(function () {
     // Self-service, no permission gate — see Preferences::class docblock.
     Route::get('/notifications/preferences', NotificationPreferences::class)->name('notifications.preferences');
 
+    // Reporting & dashboards (Phase 13). /reports/export/{format} is a
+    // plain controller route, not Livewire — file downloads need a real
+    // HTTP response stream, which a Livewire component action can't return.
+    Route::get('/reports', ReportsIndex::class)->name('reports.index')->middleware('can:reports.view');
+    Route::get('/reports/export/{format}', [ReportExportController::class, '__invoke'])
+        ->name('reports.export')
+        ->middleware('can:reports.export')
+        ->where('format', 'pdf|csv|excel');
+
     Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
 
     Route::get('/subscriptions', SubscriptionsIndex::class)->name('subscriptions.index')->middleware('can:subscriptions.view');
@@ -107,7 +118,6 @@ Route::middleware(['auth'])->group(function () {
     // Permission-gated via `can:` so the shell's access control is real,
     // not just visual.
     $placeholders = [
-        'reports' => ['reports.view', 'Reports', 'Role-based dashboards and exports.'],
         'users' => ['users.manage', 'Users', 'User accounts and role assignment.'],
     ];
 
