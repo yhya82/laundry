@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -73,15 +74,43 @@ class User extends Authenticatable
         return $this->hasMany(UserRole::class);
     }
 
-    public function employee(): HasMany
+    // uq_employees_user enforces at most one employee row per user —
+    // hasOne, not hasMany (a Phase 2 oversight, fixed in Phase 4).
+    public function employee(): HasOne
     {
-        return $this->hasMany(Employee::class);
+        return $this->hasOne(Employee::class);
     }
+
+    /**
+     * @var array<string>|null
+     */
+    private ?array $permissionSlugsCache = null;
 
     public function hasPermission(string $slug): bool
     {
-        return $this->roles()
-            ->whereHas('permissions', fn ($query) => $query->where('slug', $slug))
-            ->exists();
+        return in_array($slug, $this->permissionSlugs(), true);
+    }
+
+    public function hasAnyPermission(array $slugs): bool
+    {
+        return count(array_intersect($slugs, $this->permissionSlugs())) > 0;
+    }
+
+    /**
+     * Union of permission slugs across every active role this user holds —
+     * memoized per request/instance so N permission checks (e.g. rendering
+     * the sidebar) don't cost N queries.
+     *
+     * @return array<string>
+     */
+    public function permissionSlugs(): array
+    {
+        return $this->permissionSlugsCache ??= $this->roles()
+            ->join('role_permissions', 'roles.id', '=', 'role_permissions.role_id')
+            ->join('permissions', 'permissions.id', '=', 'role_permissions.permission_id')
+            ->pluck('permissions.slug')
+            ->unique()
+            ->values()
+            ->all();
     }
 }

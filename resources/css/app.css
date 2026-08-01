@@ -5,7 +5,23 @@
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
+/* Class-based dark mode (`.dark` on <html>), toggled + persisted client-side
+   per §3.3 — Tailwind v4 defaults to prefers-color-scheme only, which can't
+   be manually overridden without this. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Navy sidebar — per §3.2/§3.16 a fixed brand surface, not
+       theme-adaptive like the rest of the app (same navy in light or dark
+       mode), so these live as their own tokens rather than swapping under
+       .dark. */
+    --color-sidebar: #0b1c33;
+    --color-sidebar-active: #14294a;
+    --color-sidebar-border: #1c3358;
+    --color-sidebar-text: #cbd5e1;
+    --color-sidebar-text-active: #ffffff;
+    --color-sidebar-accent: #38bdf8;
 }

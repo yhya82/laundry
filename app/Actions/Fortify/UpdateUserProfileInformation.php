@@ -3,7 +3,6 @@
 namespace App\Actions\Fortify;
 
 use App\Models\User;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -28,34 +27,15 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
                 'string',
                 'email',
                 'max:255',
-                Rule::unique('users')->ignore($user->id),
+                Rule::unique('users')->ignore($user->id)->whereNull('deleted_at'),
             ],
         ])->validateWithBag('updateProfileInformation');
 
-        if ($input['email'] !== $user->email &&
-            $user instanceof MustVerifyEmail) {
-            $this->updateVerifiedUser($user, $input);
-        } else {
-            $user->forceFill([
-                'name' => $input['name'],
-                'email' => $input['email'],
-            ])->save();
-        }
-    }
-
-    /**
-     * Update the given verified user's profile information.
-     *
-     * @param  array<string, string>  $input
-     */
-    protected function updateVerifiedUser(User $user, array $input): void
-    {
+        // No email_verified_at column and no email-verification feature in
+        // this schema (see config/fortify.php) — a plain update is enough.
         $user->forceFill([
             'name' => $input['name'],
             'email' => $input['email'],
-            'email_verified_at' => null,
         ])->save();
-
-        $user->sendEmailVerificationNotification();
     }
 }
