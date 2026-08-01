@@ -23,8 +23,22 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
+        <!--
+            MASTER_SPECIFICATION.md's schema depends on MySQL/MariaDB-specific
+            triggers and CHECK constraints (24 triggers, 58 CHECK constraints)
+            that do not exist on sqlite — Laravel's usual sqlite-in-memory
+            test default would silently skip all of that enforcement rather
+            than fail loudly. Tests run against a real MySQL/MariaDB instance
+            instead; see .github/workflows/ci.yml for the service container
+            this points at in CI, and set DB_DATABASE/DB_USERNAME/DB_PASSWORD
+            via a local .env.testing (not committed) to run tests locally.
+        -->
+        <env name="DB_CONNECTION" value="mysql"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="3306"/>
+        <env name="DB_DATABASE" value="laundry_testing"/>
+        <env name="DB_USERNAME" value="root"/>
+        <env name="DB_PASSWORD" value=""/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
