@@ -7,8 +7,6 @@ use App\Models\DiscountTemplate;
 use App\Models\LaundryOrder;
 use App\Models\LaundryOrderStageHistory;
 use App\Models\Package;
-use App\Models\Payment;
-use App\Models\Receipt;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +20,8 @@ use RuntimeException;
  * Livewire components per IMPLEMENTATION_PLAN.md Phase 1's own convention
  * ("app/Services/<Module>Service.php for anything with a DB transaction
  * boundary... so trigger-adjacent logic isn't scattered across components").
+ * Payment/receipt recording itself lives in PaymentService (Phase 8) —
+ * this class delegates to it rather than duplicating that logic.
  */
 class LaundryOrderService
 {
@@ -30,6 +30,8 @@ class LaundryOrderService
         'waiting_queue', 'received', 'sorting', 'washing', 'drying',
         'ironing', 'quality_check', 'packaging', 'ready', 'completed',
     ];
+
+    public function __construct(private PaymentService $paymentService) {}
 
     /**
      * @param  array{customer_id: int, delivery_type?: string, instructions?: ?string, cart: array<int, array{package_id: int, items: array<int, array{clothing_type_id: int, quantity: int}>}>, discount?: ?array{discount_template_id: ?int, discount_type: string, value: string, reason: string}, payment?: ?array{amount: string, payment_method: string, reference: ?string}}  $data
@@ -127,8 +129,14 @@ class LaundryOrderService
                 'priority' => $hasExpress ? 'express' : 'normal',
             ]);
 
+            // outstanding_balance is application-maintained (see
+            // PaymentService's own note) — this is the debit half: the
+            // order's finalized total is what the customer now owes,
+            // before any payment recorded against it below reduces it.
+            $customer->increment('outstanding_balance', $total);
+
             if (! empty($data['payment']) && (float) $data['payment']['amount'] > 0) {
-                $this->recordPayment($order, $data['payment'], $actor);
+                $this->paymentService->recordPayment($order, $data['payment'], $actor);
             }
 
             return $order->fresh(['packages.items', 'payments', 'receipt', 'discounts']);
@@ -205,55 +213,6 @@ class LaundryOrderService
     }
 
     /**
-     * @param  array{amount: string, payment_method: string, reference: ?string}  $payment
-     */
-    private function recordPayment(LaundryOrder $order, array $payment, User $actor): Payment
-    {
-        $amount = $payment['amount'];
-        $alreadyPaid = $order->payments()->whereIn('payment_status', ['paid', 'partial'])->sum('amount');
-        $status = bccomp(bcadd((string) $alreadyPaid, $amount, 2), (string) $order->total_amount, 2) >= 0 ? 'paid' : 'partial';
-
-        $record = $order->payments()->create([
-            'payment_number' => $this->generatePaymentNumber(),
-            'customer_id' => $order->customer_id,
-            'amount' => $amount,
-            'payment_method' => $payment['payment_method'],
-            'payment_status' => $status,
-            'reference' => $payment['reference'] ?: null,
-            'paid_by' => $actor->id,
-        ]);
-
-        if ($status === 'paid') {
-            $this->generateReceipt($order, $record, $actor);
-        }
-
-        return $record;
-    }
-
-    private function generateReceipt(LaundryOrder $order, Payment $payment, User $actor): Receipt
-    {
-        $businessName = Setting::where('setting_group', 'general')
-            ->where('setting_key', 'business_name')
-            ->value('setting_value') ?? config('app.name');
-
-        return Receipt::create([
-            'receipt_number' => $this->generateReceiptNumber(),
-            'laundry_order_id' => $order->id,
-            'payment_id' => $payment->id,
-            'customer_id' => $order->customer_id,
-            'status' => 'generated',
-            'subtotal_snapshot' => $order->subtotal_amount,
-            'discount_snapshot' => $order->discount_amount,
-            'delivery_fee_snapshot' => $order->delivery_fee_amount,
-            'store_credit_used_snapshot' => $order->store_credit_applied_amount,
-            'total_snapshot' => $order->total_amount,
-            'business_name_snapshot' => $businessName,
-            'generated_by' => $actor->id,
-            'generated_at' => now(),
-        ]);
-    }
-
-    /**
      * Advances an order exactly one stage. trg_laundry_orders_stage_sequence
      * is the real authority (rejects skips/backwards moves); this method
      * only ever offers the single legal next stage, matching §3.10's "the
@@ -326,24 +285,6 @@ class LaundryOrderService
         do {
             $candidate = 'ORD-'.now()->format('Ymd').'-'.Str::upper(Str::random(5));
         } while (LaundryOrder::where('order_number', $candidate)->exists());
-
-        return $candidate;
-    }
-
-    private function generatePaymentNumber(): string
-    {
-        do {
-            $candidate = 'PAY-'.now()->format('Ymd').'-'.Str::upper(Str::random(5));
-        } while (Payment::where('payment_number', $candidate)->exists());
-
-        return $candidate;
-    }
-
-    private function generateReceiptNumber(): string
-    {
-        do {
-            $candidate = 'RCP-'.now()->format('Ymd').'-'.Str::upper(Str::random(5));
-        } while (Receipt::where('receipt_number', $candidate)->exists());
 
         return $candidate;
     }

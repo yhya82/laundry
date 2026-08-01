@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ReceiptPdfController;
 use App\Livewire\Catalogue\ClothingTypes;
 use App\Livewire\Catalogue\Machines;
 use App\Livewire\Catalogue\Packages;
@@ -14,6 +15,7 @@ use App\Livewire\Employees\Index as EmployeesIndex;
 use App\Livewire\Orders\Queue as OrdersQueue;
 use App\Livewire\Orders\Show as OrderShow;
 use App\Livewire\Orders\Terminal as OrdersTerminal;
+use App\Livewire\Payments\Index as PaymentsIndex;
 use App\Livewire\Settings\Index as SettingsIndex;
 use App\Livewire\Subscriptions\Index as SubscriptionsIndex;
 use Illuminate\Support\Facades\Auth;
@@ -55,6 +57,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/orders/{order}', OrderShow::class)->name('orders.show');
     });
 
+    // Payments, refunds, store credit & receipts (Phase 8).
+    Route::get('/payments', PaymentsIndex::class)->name('payments.index')->middleware('can:payments.view');
+    Route::get('/receipts/{receipt}/pdf', [ReceiptPdfController::class, 'show'])->name('receipts.pdf')->middleware('can:receipts.view');
+
     Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
 
     Route::get('/subscriptions', SubscriptionsIndex::class)->name('subscriptions.index')->middleware('can:subscriptions.view');
@@ -65,7 +71,6 @@ Route::middleware(['auth'])->group(function () {
     // Permission-gated via `can:` so the shell's access control is real,
     // not just visual.
     $placeholders = [
-        'payments' => ['payments.view', 'Payments', 'Payments, refunds, and store credit.'],
         'damage' => ['damage.view', 'Damage Reports', 'Damage reports and resolution workflow.'],
         'deliveries' => ['deliveries.view', 'Deliveries', 'Pickup/delivery assignment and status.'],
         'expenses' => ['expenses.view', 'Expenses', 'Expense categories, schedules, and approvals.'],

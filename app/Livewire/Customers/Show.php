@@ -34,8 +34,8 @@ class Show extends Component
         ['key' => 'laundry', 'label' => 'Laundry', 'ready' => false],
         ['key' => 'packages', 'label' => 'Packages', 'ready' => false],
         ['key' => 'collections', 'label' => 'Collections', 'ready' => false],
-        ['key' => 'payments', 'label' => 'Payments', 'ready' => false],
-        ['key' => 'receipts', 'label' => 'Receipts', 'ready' => false],
+        ['key' => 'payments', 'label' => 'Payments', 'ready' => true],
+        ['key' => 'receipts', 'label' => 'Receipts', 'ready' => true],
         ['key' => 'damages', 'label' => 'Damages', 'ready' => false],
         ['key' => 'notifications', 'label' => 'Notifications', 'ready' => false],
         ['key' => 'history', 'label' => 'History', 'ready' => true],
@@ -113,6 +113,18 @@ class Show extends Component
     public function timeline()
     {
         return $this->customer->timelineEvents()->orderByDesc('occurred_at')->limit(50)->get();
+    }
+
+    #[Computed]
+    public function payments()
+    {
+        return $this->customer->payments()->with(['laundryOrder', 'refunds'])->latest()->limit(50)->get();
+    }
+
+    #[Computed]
+    public function receipts()
+    {
+        return $this->customer->receipts()->with('laundryOrder')->latest('generated_at')->limit(50)->get();
     }
 
     public function render()

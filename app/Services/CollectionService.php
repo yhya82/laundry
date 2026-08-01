@@ -7,8 +7,8 @@ use App\Models\LaundryOrder;
 use App\Models\LaundryOrderStageHistory;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Concerns\RetriesOnDeadlock;
 use Carbon\Carbon;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -21,6 +21,8 @@ use RuntimeException;
  */
 class CollectionService
 {
+    use RetriesOnDeadlock;
+
     /**
      * Days between collections per frequency_type — "N times per month",
      * matching the monthly_1..monthly_4 naming (schema.sql leaves the exact
@@ -166,28 +168,11 @@ class CollectionService
 
         $order->update(['subtotal_amount' => $subtotal, 'total_amount' => $subtotal]);
 
+        // Same application-maintained outstanding_balance debit as the
+        // walk-in path in LaundryOrderService — see PaymentService's note.
+        $order->customer()->increment('outstanding_balance', $subtotal);
+
         return $order->fresh();
-    }
-
-    private function retryOnDeadlock(callable $callback, int $maxAttempts = 3)
-    {
-        $attempt = 0;
-
-        while (true) {
-            try {
-                return $callback();
-            } catch (QueryException $e) {
-                $attempt++;
-                $mysqlErrorCode = $e->errorInfo[1] ?? null;
-                $isTransient = in_array($mysqlErrorCode, [1213, 1205], true); // deadlock, lock wait timeout
-
-                if (! $isTransient || $attempt >= $maxAttempts) {
-                    throw $e;
-                }
-
-                usleep(50_000 * $attempt);
-            }
-        }
     }
 
     private function generateOrderNumber(): string

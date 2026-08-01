@@ -110,26 +110,76 @@
             </div>
 
             <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                <h2 class="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Payments</h2>
+                <div class="mb-3 flex items-center justify-between">
+                    <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Payments</h2>
+                    @if (! in_array($order->status, ['cancelled']) && bccomp($this->remainingBalance, '0', 2) > 0)
+                        <div class="flex items-center gap-2">
+                            @can('payments.store_credit')
+                                @if ($order->customer->store_credit_balance > 0)
+                                    <button wire:click="openApplyCreditDrawer" type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+                                        Apply store credit
+                                    </button>
+                                @endif
+                            @endcan
+                            @can('payments.create')
+                                <button wire:click="openPaymentDrawer" type="button" class="rounded-md bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">
+                                    Record payment
+                                </button>
+                            @endcan
+                        </div>
+                    @endif
+                </div>
+
+                <p class="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                    Remaining balance: <span class="font-medium tabular-nums text-slate-700 dark:text-slate-200">{{ number_format($this->remainingBalance, 2) }}</span>
+                </p>
+
                 @forelse ($order->payments as $payment)
                     <div class="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0 dark:border-slate-800">
                         <div>
                             <span class="font-medium text-slate-800 dark:text-slate-100">{{ number_format($payment->amount, 2) }}</span>
                             <span class="text-slate-500 dark:text-slate-400"> via {{ str_replace('_', ' ', $payment->payment_method) }}</span>
+                            @if ($payment->refunds->isNotEmpty())
+                                <span class="block text-xs text-rose-500">Refunded {{ number_format($payment->refunds->sum('amount'), 2) }}</span>
+                            @endif
                         </div>
-                        <span @class([
-                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize',
-                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' => $payment->payment_status === 'paid',
-                            'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' => $payment->payment_status === 'partial',
-                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' => ! in_array($payment->payment_status, ['paid', 'partial']),
-                        ])>{{ $payment->payment_status }}</span>
+                        <div class="flex items-center gap-2">
+                            <span @class([
+                                'inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' => $payment->payment_status === 'paid',
+                                'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' => $payment->payment_status === 'partial',
+                                'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' => ! in_array($payment->payment_status, ['paid', 'partial']),
+                            ])>{{ $payment->payment_status }}</span>
+                            @can('payments.refund')
+                                @if (in_array($payment->payment_status, ['paid', 'partial']) && bccomp($payment->amount, (string) $payment->refunds->sum('amount'), 2) > 0)
+                                    <button wire:click="openRefundDrawer({{ $payment->id }})" type="button" class="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400">Refund</button>
+                                @endif
+                            @endcan
+                        </div>
                     </div>
                 @empty
-                    <p class="text-sm text-slate-400">No payments recorded yet — full payment handling lands in Phase 8.</p>
+                    <p class="text-sm text-slate-400">No payments recorded yet.</p>
                 @endforelse
 
                 @if ($order->receipt)
-                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Receipt <strong class="text-slate-700 dark:text-slate-200">{{ $order->receipt->receipt_number }}</strong> generated.</p>
+                    <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
+                        <p class="text-sm text-slate-500 dark:text-slate-400">
+                            Receipt <strong class="text-slate-700 dark:text-slate-200">{{ $order->receipt->receipt_number }}</strong>
+                            @if ($order->receipt->status === 'cancelled')
+                                <span class="text-rose-500">(cancelled)</span>
+                            @endif
+                        </p>
+                        <div class="flex items-center gap-3">
+                            @can('receipts.print')
+                                <a href="{{ route('receipts.pdf', $order->receipt) }}" target="_blank" class="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">View / print</a>
+                            @endcan
+                            @can('receipts.cancel')
+                                @if ($order->receipt->status !== 'cancelled')
+                                    <button wire:click="$set('showCancelReceiptDrawer', true)" type="button" class="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400">Cancel receipt</button>
+                                @endif
+                            @endcan
+                        </div>
+                    </div>
                 @endif
             </div>
 
@@ -197,6 +247,94 @@
         <x-slot:footer>
             <button wire:click="$set('showCancelDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Back</button>
             <button wire:click="cancelOrder" type="button" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Cancel order</button>
+        </x-slot:footer>
+    </x-drawer>
+
+    <x-drawer :show="$showPaymentDrawer" title="Record payment">
+        <form wire:submit="recordPayment" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Amount</label>
+                <input type="text" inputmode="decimal" wire:model="paymentAmount" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                @error('paymentAmount') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Method</label>
+                <select wire:model="paymentMethod" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="mobile_money">Mobile money</option>
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="credit">Credit</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Reference (optional)</label>
+                <input type="text" wire:model="paymentReference" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                @error('paymentReference') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+        </form>
+
+        <x-slot:footer>
+            <button wire:click="$set('showPaymentDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
+            <button wire:click="recordPayment" type="button" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Record payment</button>
+        </x-slot:footer>
+    </x-drawer>
+
+    <x-drawer :show="$showRefundDrawer" title="Issue refund">
+        <form wire:submit="refundPayment" class="space-y-4">
+            <p class="text-sm text-slate-500 dark:text-slate-400">Up to {{ number_format($this->refundMax, 2) }} refundable on this payment.</p>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Amount</label>
+                <input type="text" inputmode="decimal" wire:model="refundAmount" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                @error('refundAmount') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Reason</label>
+                <textarea wire:model="refundReason" rows="2" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"></textarea>
+                @error('refundReason') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+            <label class="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input type="checkbox" wire:model="refundAsStoreCredit" class="rounded border-slate-300 dark:border-slate-600">
+                Issue as store credit instead of cash
+            </label>
+        </form>
+
+        <x-slot:footer>
+            <button wire:click="$set('showRefundDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
+            <button wire:click="refundPayment" type="button" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Issue refund</button>
+        </x-slot:footer>
+    </x-drawer>
+
+    <x-drawer :show="$showApplyCreditDrawer" title="Apply store credit">
+        <form wire:submit="applyStoreCredit" class="space-y-4">
+            <p class="text-sm text-slate-500 dark:text-slate-400">
+                Customer has {{ number_format($order->customer->store_credit_balance, 2) }} available.
+            </p>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Amount to apply</label>
+                <input type="text" inputmode="decimal" wire:model="applyCreditAmount" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                @error('applyCreditAmount') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+        </form>
+
+        <x-slot:footer>
+            <button wire:click="$set('showApplyCreditDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
+            <button wire:click="applyStoreCredit" type="button" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Apply</button>
+        </x-slot:footer>
+    </x-drawer>
+
+    <x-drawer :show="$showCancelReceiptDrawer" title="Cancel receipt">
+        <form wire:submit="cancelReceipt" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Reason</label>
+                <textarea wire:model="cancelReceiptReason" rows="3" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"></textarea>
+                @error('cancelReceiptReason') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+        </form>
+
+        <x-slot:footer>
+            <button wire:click="$set('showCancelReceiptDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Back</button>
+            <button wire:click="cancelReceipt" type="button" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Cancel receipt</button>
         </x-slot:footer>
     </x-drawer>
 </div>
