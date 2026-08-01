@@ -36,7 +36,7 @@ class Show extends Component
         ['key' => 'collections', 'label' => 'Collections', 'ready' => false],
         ['key' => 'payments', 'label' => 'Payments', 'ready' => true],
         ['key' => 'receipts', 'label' => 'Receipts', 'ready' => true],
-        ['key' => 'damages', 'label' => 'Damages', 'ready' => false],
+        ['key' => 'damages', 'label' => 'Damages', 'ready' => true],
         ['key' => 'notifications', 'label' => 'Notifications', 'ready' => false],
         ['key' => 'history', 'label' => 'History', 'ready' => true],
     ];
@@ -125,6 +125,12 @@ class Show extends Component
     public function receipts()
     {
         return $this->customer->receipts()->with('laundryOrder')->latest('generated_at')->limit(50)->get();
+    }
+
+    #[Computed]
+    public function damageReports()
+    {
+        return $this->customer->damageReports()->with('laundryOrder')->latest()->limit(50)->get();
     }
 
     public function render()

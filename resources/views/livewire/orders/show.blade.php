@@ -197,6 +197,34 @@
                     @endforeach
                 </div>
             @endif
+
+            <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <div class="mb-3 flex items-center justify-between">
+                    <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Damage reports</h2>
+                    @can('damage.create')
+                        @if ($order->status !== 'cancelled')
+                            <button wire:click="openDamageDrawer" type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+                                Report damage
+                            </button>
+                        @endif
+                    @endcan
+                </div>
+
+                @forelse ($order->damageReports as $report)
+                    <a href="{{ route('damage.show', $report) }}" wire:key="dmg-{{ $report->id }}" class="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+                        <span class="text-slate-700 dark:text-slate-200">{{ \Illuminate\Support\Str::limit($report->description, 50) }}</span>
+                        <span @class([
+                            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize',
+                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' => $report->status === 'resolved',
+                            'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300' => $report->status === 'rejected',
+                            'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300' => in_array($report->status, ['approved']),
+                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' => in_array($report->status, ['reported', 'under_review']),
+                        ])>{{ str_replace('_', ' ', $report->status) }}</span>
+                    </a>
+                @empty
+                    <p class="text-sm text-slate-400">No damage reported on this order.</p>
+                @endforelse
+            </div>
         </div>
 
         <div class="space-y-6">
@@ -335,6 +363,70 @@
         <x-slot:footer>
             <button wire:click="$set('showCancelReceiptDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Back</button>
             <button wire:click="cancelReceipt" type="button" class="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">Cancel receipt</button>
+        </x-slot:footer>
+    </x-drawer>
+
+    <x-drawer :show="$showDamageDrawer" title="Report damage">
+        <form wire:submit="reportDamage" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
+                <textarea wire:model="damageDescription" rows="2" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"></textarea>
+                @error('damageDescription') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Affected item</label>
+                <div class="mt-1 flex gap-2">
+                    <select wire:model="pendingItemId" class="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                        <option value="">Select an item…</option>
+                        @foreach ($this->orderItemOptions as $option)
+                            <option value="{{ $option['id'] }}">{{ $option['label'] }}</option>
+                        @endforeach
+                    </select>
+                    <button wire:click="addDamageItem" type="button" class="shrink-0 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">Add</button>
+                </div>
+                @error('damageItems') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+
+            @if (! empty($damageItems))
+                <div class="space-y-3">
+                    @foreach ($damageItems as $index => $line)
+                        <div wire:key="dmg-line-{{ $index }}" class="rounded-md border border-slate-200 p-3 dark:border-slate-700">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-slate-800 dark:text-slate-100">{{ $line['item_label'] }}</span>
+                                <button wire:click="removeDamageItem({{ $index }})" type="button" class="text-xs text-rose-600 hover:underline dark:text-rose-400">Remove</button>
+                            </div>
+                            <div class="mt-2 grid grid-cols-2 gap-2">
+                                <select wire:model="damageItems.{{ $index }}.damage_type_id" class="rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                                    <option value="">Damage type…</option>
+                                    @foreach ($this->damageTypes as $type)
+                                        <option value="{{ $type->id }}">{{ $type->name }}</option>
+                                    @endforeach
+                                </select>
+                                <select wire:model="damageItems.{{ $index }}.severity" class="rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                            @error("damageItems.{$index}.damage_type_id") <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+                            <input type="text" wire:model="damageItems.{{ $index }}.description" placeholder="Note (optional)" class="mt-2 block w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Evidence photos (optional)</label>
+                <input type="file" wire:model="damageEvidence" multiple accept="image/*" class="mt-1 block w-full text-sm text-slate-600 dark:text-slate-300">
+                @error('damageEvidence.*') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+            </div>
+        </form>
+
+        <x-slot:footer>
+            <button wire:click="$set('showDamageDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
+            <button wire:click="reportDamage" type="button" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">File report</button>
         </x-slot:footer>
     </x-drawer>
 </div>

@@ -8,6 +8,8 @@ use App\Livewire\Catalogue\Services;
 use App\Livewire\Collections\Index as CollectionsIndex;
 use App\Livewire\Customers\Index as CustomersIndex;
 use App\Livewire\Customers\Show as CustomerShow;
+use App\Livewire\Damage\Index as DamageIndex;
+use App\Livewire\Damage\Show as DamageShow;
 use App\Livewire\Dashboard;
 use App\Livewire\Discounts\Templates as DiscountTemplates;
 use App\Livewire\Employees\Departments;
@@ -61,6 +63,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/payments', PaymentsIndex::class)->name('payments.index')->middleware('can:payments.view');
     Route::get('/receipts/{receipt}/pdf', [ReceiptPdfController::class, 'show'])->name('receipts.pdf')->middleware('can:receipts.view');
 
+    // Damage reports (Phase 9). /damage/{report} must be registered after
+    // /damage — same wildcard-vs-static-segment ordering note as /orders.
+    Route::middleware('can:damage.view')->group(function () {
+        Route::get('/damage', DamageIndex::class)->name('damage.index');
+        Route::get('/damage/{report}', DamageShow::class)->name('damage.show');
+    });
+
     Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
 
     Route::get('/subscriptions', SubscriptionsIndex::class)->name('subscriptions.index')->middleware('can:subscriptions.view');
@@ -71,7 +80,6 @@ Route::middleware(['auth'])->group(function () {
     // Permission-gated via `can:` so the shell's access control is real,
     // not just visual.
     $placeholders = [
-        'damage' => ['damage.view', 'Damage Reports', 'Damage reports and resolution workflow.'],
         'deliveries' => ['deliveries.view', 'Deliveries', 'Pickup/delivery assignment and status.'],
         'expenses' => ['expenses.view', 'Expenses', 'Expense categories, schedules, and approvals.'],
         'reports' => ['reports.view', 'Reports', 'Role-based dashboards and exports.'],
