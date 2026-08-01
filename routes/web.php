@@ -4,10 +4,18 @@ use App\Livewire\Catalogue\ClothingTypes;
 use App\Livewire\Catalogue\Machines;
 use App\Livewire\Catalogue\Packages;
 use App\Livewire\Catalogue\Services;
+use App\Livewire\Collections\Index as CollectionsIndex;
+use App\Livewire\Customers\Index as CustomersIndex;
+use App\Livewire\Customers\Show as CustomerShow;
 use App\Livewire\Dashboard;
+use App\Livewire\Discounts\Templates as DiscountTemplates;
 use App\Livewire\Employees\Departments;
 use App\Livewire\Employees\Index as EmployeesIndex;
+use App\Livewire\Orders\Queue as OrdersQueue;
+use App\Livewire\Orders\Show as OrderShow;
+use App\Livewire\Orders\Terminal as OrdersTerminal;
 use App\Livewire\Settings\Index as SettingsIndex;
+use App\Livewire\Subscriptions\Index as SubscriptionsIndex;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -33,15 +41,30 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/settings', SettingsIndex::class)->name('settings.index')->middleware('can:settings.view');
 
+    Route::middleware('can:customers.view')->group(function () {
+        Route::get('/customers', CustomersIndex::class)->name('customers.index');
+        Route::get('/customers/{customer}', CustomerShow::class)->name('customers.show');
+    });
+
+    // Laundry orders & POS terminal (Phase 6). /orders/terminal must be
+    // registered before /orders/{order} — otherwise the wildcard route
+    // would swallow "terminal" as an order-ID segment.
+    Route::middleware('can:orders.view')->group(function () {
+        Route::get('/orders', OrdersQueue::class)->name('orders.index');
+        Route::get('/orders/terminal', OrdersTerminal::class)->name('orders.terminal')->middleware('can:orders.create');
+        Route::get('/orders/{order}', OrderShow::class)->name('orders.show');
+    });
+
+    Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
+
+    Route::get('/subscriptions', SubscriptionsIndex::class)->name('subscriptions.index')->middleware('can:subscriptions.view');
+    Route::get('/collections', CollectionsIndex::class)->name('collections.index')->middleware('can:collections.manage');
+
     // Placeholder destinations for the sidebar built in Phase 3 — each
-    // module's real screens replace these one at a time in Phases 5-13.
+    // module's real screens replace these one at a time in Phases 8-13.
     // Permission-gated via `can:` so the shell's access control is real,
     // not just visual.
     $placeholders = [
-        'customers' => ['customers.view', 'Customers', 'Customer profiles, addresses, notes, and timeline.'],
-        'orders' => ['orders.view', 'Laundry Orders', 'The POS terminal and processing queue.'],
-        'subscriptions' => ['subscriptions.view', 'Subscriptions', 'Recurring pickup schedules and package plans.'],
-        'collections' => ['collections.manage', 'Collections', 'Scheduled pickups and their conversion into orders.'],
         'payments' => ['payments.view', 'Payments', 'Payments, refunds, and store credit.'],
         'damage' => ['damage.view', 'Damage Reports', 'Damage reports and resolution workflow.'],
         'deliveries' => ['deliveries.view', 'Deliveries', 'Pickup/delivery assignment and status.'],
