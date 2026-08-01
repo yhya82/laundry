@@ -225,6 +225,40 @@
                     <p class="text-sm text-slate-400">No damage reported on this order.</p>
                 @endforelse
             </div>
+
+            @if ($order->delivery_type === 'delivery')
+                <div class="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Delivery</h2>
+                        @can('deliveries.manage')
+                            @if (! $order->delivery)
+                                <button wire:click="openDeliveryDrawer" type="button" class="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
+                                    Schedule delivery
+                                </button>
+                            @endif
+                        @endcan
+                    </div>
+
+                    @if ($order->delivery)
+                        <a href="{{ route('deliveries.show', $order->delivery) }}" class="flex items-center justify-between rounded-md border border-slate-100 p-2.5 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+                            <div>
+                                <span class="text-slate-700 dark:text-slate-200">{{ $order->delivery->address_snapshot ?: 'No address on file' }}</span>
+                                @if ($order->delivery->scheduled_date)
+                                    <span class="block text-xs text-slate-400">Scheduled {{ $order->delivery->scheduled_date->format('M j, Y') }}</span>
+                                @endif
+                            </div>
+                            <span @class([
+                                'inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize',
+                                'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' => $order->delivery->status === 'delivered',
+                                'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300' => in_array($order->delivery->status, ['failed', 'cancelled']),
+                                'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' => ! in_array($order->delivery->status, ['delivered', 'failed', 'cancelled']),
+                            ])>{{ str_replace('_', ' ', $order->delivery->status) }}</span>
+                        </a>
+                    @else
+                        <p class="text-sm text-slate-400">No delivery scheduled yet.</p>
+                    @endif
+                </div>
+            @endif
         </div>
 
         <div class="space-y-6">
@@ -427,6 +461,52 @@
         <x-slot:footer>
             <button wire:click="$set('showDamageDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
             <button wire:click="reportDamage" type="button" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">File report</button>
+        </x-slot:footer>
+    </x-drawer>
+
+    <x-drawer :show="$showDeliveryDrawer" title="Schedule delivery">
+        <form wire:submit="scheduleDelivery" class="space-y-4">
+            @if ($order->customer->addresses->isNotEmpty())
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Saved address</label>
+                    <select wire:model="deliveryAddressId" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                        <option value="">Enter manually…</option>
+                        @foreach ($order->customer->addresses as $address)
+                            <option value="{{ $address->id }}">{{ collect([$address->label, $address->street, $address->city])->filter()->implode(' — ') }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            @endif
+
+            @if (! $deliveryAddressId)
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Address</label>
+                    <input type="text" wire:model="deliveryAddressSnapshot" placeholder="Street, area, city" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                    @error('deliveryAddressSnapshot') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+                </div>
+            @endif
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Delivery fee</label>
+                <input type="text" inputmode="decimal" wire:model="deliveryFee" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+                @error('deliveryFee') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
+                <p class="mt-1 text-xs text-slate-400">Added to the order total immediately.</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Scheduled date (optional)</label>
+                <input type="date" wire:model="deliveryScheduledDate" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Instructions (optional)</label>
+                <input type="text" wire:model="deliveryInstructions" class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+            </div>
+        </form>
+
+        <x-slot:footer>
+            <button wire:click="$set('showDeliveryDrawer', false)" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
+            <button wire:click="scheduleDelivery" type="button" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Schedule</button>
         </x-slot:footer>
     </x-drawer>
 </div>

@@ -8,6 +8,7 @@ use App\Models\LaundryOrder;
 use App\Models\Machine;
 use App\Models\Payment;
 use App\Services\DamageService;
+use App\Services\DeliveryService;
 use App\Services\LaundryOrderService;
 use App\Services\PaymentService;
 use App\Services\StoreCreditService;
@@ -70,9 +71,21 @@ class Show extends Component
     /** @var array<int, TemporaryUploadedFile> */
     public array $damageEvidence = [];
 
+    public bool $showDeliveryDrawer = false;
+
+    public ?int $deliveryAddressId = null;
+
+    public string $deliveryAddressSnapshot = '';
+
+    public string $deliveryFee = '0.00';
+
+    public string $deliveryScheduledDate = '';
+
+    public string $deliveryInstructions = '';
+
     public function mount(LaundryOrder $order): void
     {
-        $this->order = $order->load(['customer', 'packages.package', 'packages.items.clothingType', 'stageHistory', 'discounts', 'payments.refunds', 'receipt', 'assignedEmployee', 'machine', 'damageReports']);
+        $this->order = $order->load(['customer.addresses', 'packages.package', 'packages.items.clothingType', 'stageHistory', 'discounts', 'payments.refunds', 'receipt', 'assignedEmployee', 'machine', 'damageReports', 'delivery']);
         $this->assignEmployeeId = $order->assigned_employee_id;
         $this->assignMachineId = $order->machine_id;
     }
@@ -388,6 +401,51 @@ class Show extends Component
         $this->order = $this->order->fresh(['damageReports']);
         $this->showDamageDrawer = false;
         $this->dispatch('notify', type: 'success', message: 'Damage report filed.');
+    }
+
+    public function openDeliveryDrawer(): void
+    {
+        $this->deliveryAddressId = $this->order->customer->addresses->firstWhere('is_default', true)?->id;
+        $this->deliveryAddressSnapshot = '';
+        $this->deliveryFee = '0.00';
+        $this->deliveryScheduledDate = '';
+        $this->deliveryInstructions = '';
+        $this->showDeliveryDrawer = true;
+    }
+
+    public function scheduleDelivery(DeliveryService $service): void
+    {
+        $this->validate([
+            'deliveryAddressId' => ['nullable', 'integer', 'exists:customer_addresses,id'],
+            'deliveryAddressSnapshot' => ['nullable', 'string', 'max:255'],
+            'deliveryFee' => ['required', 'numeric', 'min:0'],
+            'deliveryScheduledDate' => ['nullable', 'date'],
+            'deliveryInstructions' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if (! $this->deliveryAddressId && ! $this->deliveryAddressSnapshot) {
+            $this->addError('deliveryAddressSnapshot', 'Select a saved address or enter one manually.');
+
+            return;
+        }
+
+        try {
+            $service->createDelivery($this->order, [
+                'address_id' => $this->deliveryAddressId,
+                'address_snapshot' => $this->deliveryAddressSnapshot ?: null,
+                'delivery_fee' => $this->deliveryFee,
+                'scheduled_date' => $this->deliveryScheduledDate ?: null,
+                'delivery_instructions' => $this->deliveryInstructions ?: null,
+            ], Auth::user());
+        } catch (ValidationException $e) {
+            $this->addError('deliveryAddressSnapshot', $e->validator->errors()->first());
+
+            return;
+        }
+
+        $this->order = $this->order->fresh(['delivery', 'customer']);
+        $this->showDeliveryDrawer = false;
+        $this->dispatch('notify', type: 'success', message: 'Delivery scheduled.');
     }
 
     public function render()

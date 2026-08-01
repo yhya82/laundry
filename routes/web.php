@@ -11,6 +11,8 @@ use App\Livewire\Customers\Show as CustomerShow;
 use App\Livewire\Damage\Index as DamageIndex;
 use App\Livewire\Damage\Show as DamageShow;
 use App\Livewire\Dashboard;
+use App\Livewire\Delivery\Index as DeliveryIndex;
+use App\Livewire\Delivery\Show as DeliveryShow;
 use App\Livewire\Discounts\Templates as DiscountTemplates;
 use App\Livewire\Employees\Departments;
 use App\Livewire\Employees\Index as EmployeesIndex;
@@ -70,6 +72,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/damage/{report}', DamageShow::class)->name('damage.show');
     });
 
+    // Deliveries (Phase 10). Named "deliveries.*" (plural) to match the
+    // Phase 3 sidebar entry and permission slugs (deliveries.view/.manage),
+    // unlike damage.* above which is already singular in the seeder.
+    Route::middleware('can:deliveries.view')->group(function () {
+        Route::get('/deliveries', DeliveryIndex::class)->name('deliveries.index');
+        Route::get('/deliveries/{delivery}', DeliveryShow::class)->name('deliveries.show');
+    });
+
     Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
 
     Route::get('/subscriptions', SubscriptionsIndex::class)->name('subscriptions.index')->middleware('can:subscriptions.view');
@@ -80,7 +90,6 @@ Route::middleware(['auth'])->group(function () {
     // Permission-gated via `can:` so the shell's access control is real,
     // not just visual.
     $placeholders = [
-        'deliveries' => ['deliveries.view', 'Deliveries', 'Pickup/delivery assignment and status.'],
         'expenses' => ['expenses.view', 'Expenses', 'Expense categories, schedules, and approvals.'],
         'reports' => ['reports.view', 'Reports', 'Role-based dashboards and exports.'],
         'users' => ['users.manage', 'Users', 'User accounts and role assignment.'],
