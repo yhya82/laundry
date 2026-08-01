@@ -16,6 +16,9 @@ use App\Livewire\Delivery\Show as DeliveryShow;
 use App\Livewire\Discounts\Templates as DiscountTemplates;
 use App\Livewire\Employees\Departments;
 use App\Livewire\Employees\Index as EmployeesIndex;
+use App\Livewire\Expenses\Categories as ExpenseCategories;
+use App\Livewire\Expenses\Index as ExpensesIndex;
+use App\Livewire\Expenses\Schedules as ExpenseSchedules;
 use App\Livewire\Orders\Queue as OrdersQueue;
 use App\Livewire\Orders\Show as OrderShow;
 use App\Livewire\Orders\Terminal as OrdersTerminal;
@@ -80,6 +83,16 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/deliveries/{delivery}', DeliveryShow::class)->name('deliveries.show');
     });
 
+    // Expenses (Phase 11): categories/schedules/expenses share one tabbed
+    // nav (x-tabs), mirroring /packages' sub-route pattern rather than the
+    // Index+Show shape used by Damage/Delivery — expenses aren't tied to a
+    // single order/customer the way those are.
+    Route::middleware('can:expenses.view')->group(function () {
+        Route::get('/expenses', ExpensesIndex::class)->name('expenses.index');
+        Route::get('/expenses/schedules', ExpenseSchedules::class)->name('expenses.schedules');
+        Route::get('/expenses/categories', ExpenseCategories::class)->name('expenses.categories');
+    });
+
     Route::get('/discounts', DiscountTemplates::class)->name('discounts.index')->middleware('can:discounts.manage');
 
     Route::get('/subscriptions', SubscriptionsIndex::class)->name('subscriptions.index')->middleware('can:subscriptions.view');
@@ -90,7 +103,6 @@ Route::middleware(['auth'])->group(function () {
     // Permission-gated via `can:` so the shell's access control is real,
     // not just visual.
     $placeholders = [
-        'expenses' => ['expenses.view', 'Expenses', 'Expense categories, schedules, and approvals.'],
         'reports' => ['reports.view', 'Reports', 'Role-based dashboards and exports.'],
         'users' => ['users.manage', 'Users', 'User accounts and role assignment.'],
     ];
